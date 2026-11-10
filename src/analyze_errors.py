@@ -8,6 +8,7 @@ import html
 import json
 from collections import Counter
 from pathlib import Path
+import config as cfg
 
 
 def load_csv(path):
@@ -82,7 +83,7 @@ def write_html(path, rows, counts, missing):
         )
     count_html = ''.join(f'<li>{esc(name)}: {number}</li>' for name, number in counts.most_common())
     warning = (f'<p class="warning">Faltan los datos originales de {missing} casos. '
-               'Coloca data/processed/sample.jsonl para incluir afirmaciones y contextos.</p>') if missing else ''
+               f'Coloca {cfg.ARCHIVO_MUESTRA} para incluir afirmaciones y contextos.</p>') if missing else ''
     page = f'''<!doctype html><html lang="es"><head><meta charset="utf-8">
 <title>MEMERAG — Análisis de desacuerdos</title>
 <style>body{{font-family:system-ui,Arial,sans-serif;max-width:1000px;margin:40px auto;padding:0 18px;line-height:1.5;background:#f6f8fb;color:#182332}}article{{background:white;border:1px solid #dbe2eb;border-radius:12px;padding:22px;margin:24px 0}}pre{{white-space:pre-wrap;overflow-wrap:anywhere;background:#f1f4f8;padding:14px;border-radius:8px;font-family:inherit}}h1,h2{{color:#183b68}}h3{{margin-bottom:6px}}.warning{{background:#fff1dc;padding:14px;border-radius:8px}}</style>
@@ -105,16 +106,20 @@ def write_chart(path, counts):
     ax.set_xlabel('Número de desacuerdos')
     ax.set_title('MEMERAG: desacuerdos por categoría de anotación')
     fig.tight_layout()
-    fig.savefig(path, dpi=160)
+    fig.savefig(path, dpi=cfg.DPI_GRAFICOS)
     plt.close(fig)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--predictions', type=Path, default=Path('results/predictions.csv'))
-    parser.add_argument('--sample', type=Path, default=Path('data/processed/sample.jsonl'))
-    parser.add_argument('--output-dir', type=Path, default=Path('results/error_analysis'))
+    parser.add_argument('--predictions', type=Path, required=True,
+                        help='CSV de predicciones (p. ej. results/<corrida>/predictions.csv)')
+    parser.add_argument('--sample', type=Path, default=Path(cfg.ARCHIVO_MUESTRA))
+    parser.add_argument('--output-dir', type=Path, default=None,
+                        help=f'Por defecto: <carpeta del CSV>/{cfg.CARPETA_ANALISIS_ERRORES}')
     args = parser.parse_args()
+    if args.output_dir is None:
+        args.output_dir = args.predictions.resolve().parent / cfg.CARPETA_ANALISIS_ERRORES
     if not args.predictions.exists():
         parser.error(f'No existe {args.predictions}. Ejecuta primero run_experiment.py o indica --predictions.')
     predictions = load_csv(args.predictions)
@@ -127,7 +132,7 @@ def main():
             raise ValueError(f'ID vacío o duplicado en predicciones: {key!r}')
         seen.add(key)
         human, judge = pred.get('human_label', ''), pred.get('judge_label', '')
-        if human not in ('Supported', 'Not Supported') or judge not in ('Supported', 'Not Supported'):
+        if human not in cfg.ETIQUETAS or judge not in cfg.ETIQUETAS:
             continue  # Excluir respuestas inválidas y errores de API.
         if human == judge:
             continue
